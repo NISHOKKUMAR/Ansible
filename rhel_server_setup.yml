@@ -1,0 +1,47 @@
+- name: Provision a new RHEL server
+  hosts: all
+  become: yes
+
+  vars:
+    essential_packages:
+      - vim
+      - wget
+      - curl
+      - git
+      - net-tools
+
+  tasks:
+    - name: Install essential packages
+      yum:
+        name: "{{ essential_packages }}"
+        state: present
+
+    - name: Register the system with Red Hat Subscription Manager
+      command: subscription-manager register --username "{{ rhn_username }}" --password "{{ rhn_password }}"
+      when: ansible_facts['os_family'] == 'RedHat'
+
+    - name: Attach the system to a subscription
+      command: subscription-manager attach --auto
+      when: ansible_facts['os_family'] == 'RedHat'
+
+    - name: Enable and start firewalld
+      service:
+        name: firewalld
+        state: started
+        enabled: yes
+
+    - name: Allow SSH through the firewall
+      firewalld:
+        service: ssh
+        permanent: yes
+        state: enabled
+      become: yes
+
+    - name: Check current SELinux status
+      command: getenforce
+      register: selinux_status
+      changed_when: false
+
+    - name: Configure SELinux to enforcing mode if needed
+      command: setenforce 1
+      when: ansible_facts['os_family'] == 'RedHat' and selinux_status.stdout != 'Enforcing'
